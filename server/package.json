@@ -1,0 +1,17 @@
+{
+  "name": "nota-auth-backend",
+  "version": "1.0.0",
+  "description": "Auth and HWID management backend for NOTA Scanner",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.5",
+    "sqlite3": "^5.1.7"
+  }
+}
