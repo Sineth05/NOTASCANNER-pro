@@ -212,7 +212,10 @@ app.post('/api/auth/login', async (req, res) => {
     if (user.role === 'owner') {
       const settingsRes = await query("SELECT value FROM settings WHERE key = 'master_password'");
       const dbMasterPass = settingsRes[0] ? settingsRes[0].value : '200625';
-      if (!master_password || master_password !== dbMasterPass) {
+      if (!master_password) {
+        return res.status(200).json({ requires_master_password: true, role: 'owner', username: user.username });
+      }
+      if (master_password !== dbMasterPass) {
         return res.status(401).json({ error: 'Invalid master password.' });
       }
     }
