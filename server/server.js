@@ -15,6 +15,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'nota-secret-key-12345';
 // Database setup
 let dbClient;
 const isPostgres = !!process.env.DATABASE_URL;
+const isVercel = !!process.env.VERCEL;
 let dbReady = Promise.resolve();
 let initPromise = null;
 
@@ -26,7 +27,12 @@ if (isPostgres) {
   });
   dbReady = dbClient.connect()
     .then(() => console.log('Connected to PostgreSQL database.'))
-    .catch(err => console.error('PostgreSQL connection error:', err));
+    .catch(err => {
+      console.error('PostgreSQL connection error:', err);
+      throw err;
+    });
+} else if (isVercel) {
+  dbReady = Promise.reject(new Error('DATABASE_URL is required on Vercel. Add your Neon Postgres connection string in Project Settings > Environment Variables, then redeploy.'));
 } else {
   const sqlite3 = require('sqlite3').verbose();
   const dbPath = path.join(__dirname, 'database.db');
