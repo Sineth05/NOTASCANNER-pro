@@ -15,6 +15,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'nota-secret-key-12345';
 // Database setup
 let dbClient;
 const isPostgres = !!process.env.DATABASE_URL;
+let dbReady = Promise.resolve();
+let initPromise = null;
 
 if (isPostgres) {
   const { Client } = require('pg');
@@ -22,7 +24,7 @@ if (isPostgres) {
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
   });
-  dbClient.connect()
+  dbReady = dbClient.connect()
     .then(() => console.log('Connected to PostgreSQL database.'))
     .catch(err => console.error('PostgreSQL connection error:', err));
 } else {
@@ -36,8 +38,8 @@ if (isPostgres) {
 
 // Helper query function that abstracts Postgres and SQLite differences
 function query(sql, params = []) {
-  return new Promise((resolve, reject) => {
-    if (isPostgres) {
+  if (isPostgres) {
+    return dbReady.then(() => new Promise((resolve, reject) => {
       let pgSql = sql;
       let count = 1;
       while (pgSql.includes('?')) {
@@ -48,21 +50,30 @@ function query(sql, params = []) {
         if (err) reject(err);
         else resolve(res.rows);
       });
+    }));
+  }
+
+  return new Promise((resolve, reject) => {
+    const isSelect = sql.trim().toLowerCase().startsWith('select');
+    if (isSelect) {
+      dbClient.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
     } else {
-      const isSelect = sql.trim().toLowerCase().startsWith('select');
-      if (isSelect) {
-        dbClient.all(sql, params, (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        });
-      } else {
-        dbClient.run(sql, params, function(err) {
-          if (err) reject(err);
-          else resolve({ lastID: this.lastID, changes: this.changes });
-        });
-      }
+      dbClient.run(sql, params, function(err) {
+        if (err) reject(err);
+        else resolve({ lastID: this.lastID, changes: this.changes });
+      });
     }
   });
+}
+
+function ensureDbInitialized() {
+  if (!initPromise) {
+    initPromise = initDb();
+  }
+  return initPromise;
 }
 
 // Database initialization and migrations
@@ -151,6 +162,16 @@ function authenticateToken(req, res, next) {
     next();
   });
 }
+
+app.use(async (req, res, next) => {
+  try {
+    await ensureDbInitialized();
+    next();
+  } catch (err) {
+    console.error('Database initialization middleware error:', err);
+    res.status(500).json({ error: 'Server initialization error' });
+  }
+});
 
 // API Routes
 
@@ -430,8 +451,12 @@ app.get('/', (req, res) => {
 });
 
 // Start Server
-initDb().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server started on port ${PORT}`);
+if (require.main === module) {
+  ensureDbInitialized().then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server started on port ${PORT}`);
+    });
   });
-});
+}
+
+module.exports = app;
